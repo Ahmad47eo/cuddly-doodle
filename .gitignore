@@ -1,0 +1,75 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Secrets and credentials — NEVER commit
+.env
+.env.local
+.env.*
+*.secret
+secrets/
+credentials/
+
+# Datasets — large, regeneratable, or sensitive
+data/
+datasets/
+recorded/
+samples/
+*.npz
+*.h5
+*.hdf5
+*.parquet
+
+# Model artifacts (large binaries) — exclude by extension, not by directory,
+# so the core/models/ source package can be committed.
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+exports/
+
+# Build / output
+*.pyc
+.mypy_cache/
+.pytest_cache/
+*.log
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temporary / scratch
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Local analysis artifacts (not deliverables)
+analysis/

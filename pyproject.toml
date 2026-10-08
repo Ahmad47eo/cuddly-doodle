@@ -1,0 +1,32 @@
+[project]
+name = "fortnite-ai-research"
+version = "0.1.0"
+description = "Fast, general-purpose simulated gameplay AI research platform"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=1.4,<2.0",
+    "numpy>=1.24,<3.0",
+    "psutil>=5.9,<7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+fortnite-ai-ui = "core.ui.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["core/tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
