@@ -17,6 +17,25 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Connect runner to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          # API key is not needed to join the tailnet with this action.
+          # Keep it in GitHub Secrets; do not print it or pass it as a workflow input.
+
+      - name: Verify Tailscale connection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          tailscale status
+          $ip = (tailscale ip -4 | Select-Object -First 1).Trim()
+          if (-not $ip) {
+            throw "Tailscale did not provide an IPv4 address."
+          }
+          "Tailscale connected. Runner tailnet IPv4: $ip"
+          "This confirms private-network connectivity only; it does not provide a remote desktop."
+
       - name: Check runner resources and locate EXE
         shell: pwsh
         run: |
