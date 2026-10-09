@@ -36,6 +36,21 @@ jobs:
           "Tailscale connected. Runner tailnet IPv4: $ip"
           "This confirms private-network connectivity only; it does not provide a remote desktop."
 
+      - name: Enable Remote Desktop setting for local runner testing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Enable the RDP host setting, but do not open inbound firewall access.
+          # GitHub-hosted runners are temporary; this alone does not make them remotely accessible.
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Set-Service -Name TermService -StartupType Manual
+          Start-Service -Name TermService
+          $rdp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
+          $service = Get-Service -Name TermService
+          "RDP host setting enabled: $($rdp.fDenyTSConnections -eq 0)"
+          "Remote Desktop service status: $($service.Status)"
+          "Inbound firewall remains closed; this step does not create a remote desktop connection."
+
       - name: Check runner resources and locate EXE
         shell: pwsh
         run: |
