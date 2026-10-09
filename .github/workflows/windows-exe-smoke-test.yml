@@ -1,0 +1,123 @@
+name: Windows EXE smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    # Standard GitHub-hosted Windows runner. Larger-memory runners require
+    # separate eligibility/billing and runner-label configuration.
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Connect runner to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          # API key is not needed to join the tailnet with this action.
+          # Keep it in GitHub Secrets; do not print it or pass it as a workflow input.
+
+      - name: Verify Tailscale connection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          tailscale status
+          $ip = (tailscale ip -4 | Select-Object -First 1).Trim()
+          if (-not $ip) {
+            throw "Tailscale did not provide an IPv4 address."
+          }
+          "Tailscale connected. Runner tailnet IPv4: $ip"
+          "This confirms private-network connectivity only; it does not provide a remote desktop."
+
+      - name: Enable Remote Desktop setting for local runner testing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Enable the RDP host setting, but do not open inbound firewall access.
+          # GitHub-hosted runners are temporary; this alone does not make them remotely accessible.
+          Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+          Set-Service -Name TermService -StartupType Manual
+          Start-Service -Name TermService
+          $rdp = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
+          $service = Get-Service -Name TermService
+          "RDP host setting enabled: $($rdp.fDenyTSConnections -eq 0)"
+          "Remote Desktop service status: $($service.Status)"
+          "Inbound firewall remains closed; this step does not create a remote desktop connection."
+
+      - name: Check runner resources and locate EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $results = Join-Path $env:GITHUB_WORKSPACE "test-results"
+          New-Item -ItemType Directory -Force -Path $results | Out-Null
+          $log = Join-Path $results "windows-exe-smoke-test.txt"
+
+          "Windows EXE smoke test" | Out-File -FilePath $log -Encoding utf8
+          "Runner OS: $([System.Environment]::OSVersion.VersionString)" | Out-File -FilePath $log -Append -Encoding utf8
+          $memory = Get-CimInstance Win32_ComputerSystem
+          $ramGB = [math]::Round($memory.TotalPhysicalMemory / 1GB, 2)
+          "Total RAM reported by runner: $ramGB GB" | Out-File -FilePath $log -Append -Encoding utf8
+
+          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\HereticAI.exe"
+          "Expected executable: $exe" | Out-File -FilePath $log -Append -Encoding utf8
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            "FAIL: EXE not found. Place your app at dist/HereticAI.exe in the repository, or adapt this workflow to download a trusted release asset." | Out-File -FilePath $log -Append -Encoding utf8
+            Get-Content $log
+            throw "Expected dist/HereticAI.exe was not found."
+          }
+
+          $item = Get-Item -LiteralPath $exe
+          "EXE size: $([math]::Round($item.Length / 1MB, 2)) MB" | Out-File -FilePath $log -Append -Encoding utf8
+          Get-Content $log
+
+      - name: Launch EXE and perform a startup smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $results = Join-Path $env:GITHUB_WORKSPACE "test-results"
+          $log = Join-Path $results "windows-exe-smoke-test.txt"
+          $exe = Join-Path $env:GITHUB_WORKSPACE "dist\HereticAI.exe"
+
+          # This is a basic process-start test, not a full model-load or GUI test.
+          # A model requiring 20 GB RAM may exceed the standard runner's memory.
+          $memory = Get-CimInstance Win32_ComputerSystem
+          $ramGB = [math]::Round($memory.TotalPhysicalMemory / 1GB, 2)
+          if ($ramGB -lt 20) {
+            "WARNING: Runner reports less than 20 GB RAM; full model loading may fail." | Out-File -FilePath $log -Append -Encoding utf8
+          }
+
+          "Launching EXE without command-line arguments..." | Out-File -FilePath $log -Append -Encoding utf8
+          $process = Start-Process -FilePath $exe -PassThru
+          "Started process ID: $($process.Id)" | Out-File -FilePath $log -Append -Encoding utf8
+
+          $exited = $process.WaitForExit(120000)
+          if ($exited) {
+            $process.Refresh()
+            "Process exited within 120 seconds with exit code: $($process.ExitCode)" | Out-File -FilePath $log -Append -Encoding utf8
+            Get-Content $log
+            if ($process.ExitCode -ne 0) {
+              throw "EXE exited with a non-zero exit code: $($process.ExitCode)"
+            }
+            "PASS: EXE started and exited with code 0. This does not prove the model or GUI loaded correctly." | Out-File -FilePath $log -Append -Encoding utf8
+          } else {
+            "PASS: EXE remained running for 120 seconds. Stopping it so the runner can finish." | Out-File -FilePath $log -Append -Encoding utf8
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            "NOTE: Staying alive is only a startup smoke test; it does not prove the model finished loading or the GUI is usable." | Out-File -FilePath $log -Append -Encoding utf8
+          }
+
+          Get-Content $log
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe-smoke-test-results
+          path: test-results/
+          if-no-files-found: warn
